@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title> Attendance System for Students </title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+
+<!-- jQuery & Chart.js -->
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+  :root{
+    --primary:#2b6cb0;
+    --primary-dark:#1e4d8a;
+    --muted:#f0f4f8;
+    --bg:#f6f7fb;
+  }
+  body { font-family: Arial, sans-serif; margin: 0; background: var(--bg); color: #222; }
+  .navbar {background: var(--primary); padding: 10px 16px; display: flex; gap:12px; align-items:center;}
+  .navbar a {color: white; text-decoration: none; font-weight:700; cursor:pointer;}
+  .navbar a:hover {text-decoration: underline;}
+  .brand {font-weight:900; margin-right:auto;}
+  .container { max-width:1100px; margin:20px auto; background:white; padding:18px; border-radius:10px; box-shadow:0 6px 18px rgba(20,20,40,0.05); }
+
+  h1{ color:var(--primary); margin:0 0 12px 0; }
+  .hidden{ display:none; }
+
+  /* Controls */
+  .controls { margin: 12px 0; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .btn { padding:8px 12px; border-radius:6px; cursor:pointer; border:1px solid #888; background:#fff; }
+  .btn.primary { background:var(--primary); color:white; border-color:var(--primary-dark); }
+  .btn.warn { background:#f6ad55; color:white; border-color:#d4882b; }
+  .btn.danger { background:#e53e3e; color:white; border-color:#c53030; }
+
+  table { width:100%; border-collapse: collapse; margin-top:10px; background:white; }
+  thead th { background:var(--muted); padding:8px; border:1px solid #e6eef8; font-size:13px; text-align:center; }
+  td, th { border:1px solid #e6eef8; padding:8px; font-size:13px; vertical-align:middle; }
+  td input[type="checkbox"] { transform:scale(1.05); }
+
+  /* Hover highlight */
+  tr.hover-rect { outline:3px solid #1e90ff; outline-offset:-3px; background:#eef7ff !important; transition:outline 0.2s, background 0.2s; }
+
+  /* Absence color buckets */
+  tr.abs-few { background: #e9fff1 !important; }
+  tr.abs-mid { background: #fffaf0 !important; }
+  tr.abs-many { background: #fff0f0 !important; }
+
+  /* Small utilities */
+  .small { font-size:13px; color:#555; }
+  .inline { display:inline-block; vertical-align: middle; }
+  .field { margin-bottom:8px; }
+  label { font-weight:600; display:block; margin-bottom:4px; }
+  input[type="text"], input[type="email"], input[type="number"], select, input[type="date"] { width:100%; padding:6px; border-radius:4px; border:1px solid #ccc; box-sizing:border-box; }
+
+  .error { color:#c53030; font-size:13px; margin-top:4px; display:none; }
+  #message-box { margin-top:8px; font-weight:600; }
+
+  /* Responsive tweaks */
+  @media (max-width:900px){
+    .controls{ flex-direction:column; align-items:flex-start; }
+    table { font-size:12px; }
+    th, td { padding:6px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <div class="brand"><a onclick="show('home')" style="color:white;">AttendanceApp</a></div>
+  <a onclick="show('home')">Home</a>
+  <a onclick="show('list')">Attendance List</a>
+  <a onclick="show('add')">Add Student</a>
+  <a onclick="show('report')">Reports</a>
+  <a onclick="logout()">Logout</a>
+</div>
+
+<div class="container">
+  <!-- HOME -->
+  <section id="home">
+    <h1>Welcome to the Advanced Attendance System for students</h1>
+  </section>
+
+  <!-- LIST -->
+  <section id="list" class="hidden">
+    <h1>Attendance Table</h1>
+
+    <div class="controls">
+      <div class="inline">
+        <label for="search-name" class="small">Search by Name</label>
+        <input id="search-name" type="text" placeholder="Type last or first name (partial ok)" />
+      </div>
+
+      <div class="inline">
+        <button id="sort-abs" class="btn">Sort by Absences (Asc)</button>
+        <button id="sort-par" class="btn">Sort by Participation (Desc)</button>
+        <span id="sort-mode" class="small" style="margin-left:8px;">Currently unsorted</span>
+      </div>
+
+      <div class="inline">
+        <button id="show-report" class="btn primary">Show Report</button>
+        <button id="highlight-excellent" class="btn" title="Animate rows of students with < 3 absences">Highlight Excellent</button>
+        <button id="reset-colors" class="btn warn">Reset Colors</button>
+        <button id="clear-storage" class="btn danger" title="Remove all saved students">Clear All Data</button>
+      </div>
+    </div>
+
+    <table id="attendance-table">
+      <thead>
+        <tr>
+          <th>Student ID</th>
+          <th>Last Name</th>
+          <th>First Name</th>
+
+          <th>S1</th><th>S2</th><th>S3</th><th>S4</th><th>S5</th><th>S6</th>
+          <th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>P5</th><th>P6</th>
+
+          <th>Absences</th>
+          <th>Participation</th>
+          <th>Message</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- rows inserted by JS or loaded from localStorage -->
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ADD -->
+  <section id="add" class="hidden">
+    <h1>Add Student</h1>
+    <form id="add-student-form" novalidate>
+      <div style="display:flex; gap:16px; flex-wrap:wrap;">
+        <div style="flex:1; min-width:200px;">
+          <div class="field">
+            <label for="stu-id">Student ID</label>
+            <input id="stu-id" type="text">
+            <div id="err-id" class="error">ID required and numbers only.</div>
+          </div>
+
+          <div class="field">
+            <label for="stu-last">Last Name</label>
+            <input id="stu-last" type="text">
+            <div id="err-last" class="error">Letters only.</div>
+          </div>
+
+          <div class="field">
+            <label for="stu-first">First Name</label>
+            <input id="stu-first" type="text">
+            <div id="err-first" class="error">Letters only.</div>
+          </div>
+        </div>
+
+        <div style="flex:1; min-width:200px;">
+          <div class="field">
+            <label for="stu-email">Email</label>
+            <input id="stu-email" type="email">
+            <div id="err-email" class="error">Enter a valid email.</div>
+          </div>
+
+          <div class="field">
+            <label for="stu-course">Course</label>
+            <input id="stu-course" type="text" >
+            <div id="err-course" class="error">Course required.</div>
+          </div>
+
+          <div class="field">
+            <label for="stu-date">Session Date (optional)</label>
+            <input id="stu-date" type="date">
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:8px;">
+        <button id="submit-add" class="btn primary" type="submit">Submit</button>
+        <span id="add-confirm" style="margin-left:12px; display:none; color:green; font-weight:600;">Student added!</span>
+      </div>
+    </form>
+  </section>
+
+  <!-- REPORT -->
+  <section id="report" class="hidden">
+    <h1>Attendance Report</h1>
+    <div>
+      <span class="status small">Total students: <strong id="total-students"></strong></span>
+      <span class="status small" style="margin-left:12px;">Students present (absences &lt; 6): <strong id="students-present"></strong></span>
+      <span class="status small" style="margin-left:12px;">Students who participated (≥1): <strong id="students-participated"></strong></span>
+    </div>
+
+    <canvas id="reportChart" style="max-width:700px; margin-top:10px;"></canvas>
+  </section>
+
+</div>
+
+<script>
+/* -----------------------------
+   App state + persistence
+   ----------------------------- */
+const STORAGE_KEY = 'attendance_students_v1';
+
+function loadStudents(){
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return defaultStudents();
+  try { return JSON.parse(raw); } catch(e){ return defaultStudents(); }
+}
+
+function saveStudents(arr){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+}
+
+/* default demo rows */
+function defaultStudents(){
+  return [
+    {
+      id: "1001", last:"Ahmed", first:"Sara", email:"sara@example.com", course:"Web Dev", date:"",
+      s: [false,true,false,true,false,false],
+      p: [true,false,false,false,false,false]
+    },
+    {
+      id: "1002", last:"Yacine", first:"Ali", email:"ali@example.com", course:"Web Dev", date:"",
+      s: [true,false,true,true,true,true],
+      p: [false,true,true,true,true,true]
+    },
+    {
+      id: "1003", last:"Houcine", first:"Rania", email:"rania@example.com", course:"Web Dev", date:"",
+      s: [true,true,false,true,true,false],
+      p: [true,false,false,false,false,false]
+    }
+  ];
+}
+
+/* -----------------------------
+   Navigation helpers
+   ----------------------------- */
+function show(section){
+  document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+  document.getElementById(section).classList.remove('hidden');
+  if (section === 'list') renderTable();
+}
+
+function logout(){
+  alert("You have been logged out!");
+  show('home');
+}
+
+/* -----------------------------
+   Table rendering + recalc
+   ----------------------------- */
+let students = loadStudents();
+
+function renderTable(){
+  const $tbody = $('#attendance-table tbody').empty();
+  students.forEach(st => {
+    const $tr = $('<tr></tr>');
+    $tr.append(`<td class="sid">${escapeHtml(st.id)}</td>`);
+    $tr.append(`<td class="lname">${escapeHtml(st.last)}</td>`);
+    $tr.append(`<td class="fname">${escapeHtml(st.first)}</td>`);
+    // sessions s1..s6
+    for (let i=0;i<6;i++){
+      const checked = st.s && st.s[i] ? 'checked' : '';
+      $tr.append(`<td><input type="checkbox" class="s" data-idx="${i}" ${checked}></td>`);
+    }
+    // participation p1..p6
+    for (let i=0;i<6;i++){
+      const checked = st.p && st.p[i] ? 'checked' : '';
+      $tr.append(`<td><input type="checkbox" class="p" data-idx="${i}" ${checked}></td>`);
+    }
+
+    $tr.append(`<td class="abs-count">0</td>`);
+    $tr.append(`<td class="part-count">0</td>`);
+    $tr.append(`<td class="msg">No data yet</td>`);
+
+    $tbody.append($tr);
+  });
+
+  recalcAll();
+}
+
+/* Escape HTML to avoid insertion issues */
+function escapeHtml(str){
+  if (!str && str !== 0) return '';
+  return String(str).replace(/[&<>"'\/]/g, function (s) {
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#x2F;'})[s];
+  });
+}
+
+/* recalc logic, same as your advanced version */
+function recalcRow($row){
+  let totalSessions = $row.find('input.s').length;
+  let present = $row.find('input.s:checked').length;
+  let absences = totalSessions - present;
+  $row.find('.abs-count').text(absences);
+
+  let part = $row.find('input.p:checked').length;
+  $row.find('.part-count').text(part);
+
+  let msg = "";
+  if (absences >= 5) msg = "Excluded – too many absences – You need to participate more";
+  else if (absences >= 3) msg = "Warning – attendance low – You need to participate more";
+  else {
+    if (part >= 4) msg = "Good attendance – Excellent participation";
+    else if (part >= 1) msg = "Good attendance – Good participation";
+    else msg = "Good attendance – You should participate more";
+  }
+  $row.find('.msg').text(msg);
+
+  $row.removeClass("abs-few abs-mid abs-many");
+  if (absences < 3) $row.addClass("abs-few");
+  else if (absences <= 4) $row.addClass("abs-mid");
+  else $row.addClass("abs-many");
+}
+
+function recalcAll(){
+  $('#attendance-table tbody tr').each(function(){
+    recalcRow($(this));
+  });
+  // reflect changes back to students array and persist
+  syncFromTableToState();
+}
+
+/* When checkboxes change within the table, update state and recalc */
+$('#attendance-table').on('change', 'input.s, input.p', function(){
+  recalcRow($(this).closest('tr'));
+  syncFromTableToState();
+});
+
+/* Click row show name + absences */
+$('#attendance-table').on('click', 'tbody tr', function(e){
+  if ($(e.target).is('input')) return;
+  let fullName = $(this).find('.lname').text() + " " + $(this).find('.fname').text();
+  let abs = $(this).find('.abs-count').text();
+  alert("Student: " + fullName + "\nAbsences: " + abs);
+});
+
+/* Hover effect */
+$('#attendance-table').on('mouseenter', 'tbody tr', function(){ $(this).addClass('hover-rect'); });
+$('#attendance-table').on('mouseleave', 'tbody tr', function(){ $(this).removeClass('hover-rect'); });
+
+/* -----------------------------
+   Sync functions: DOM <-> students[]
+   ----------------------------- */
+function syncFromTableToState(){
+  // gather rows in order
+  const rows = $('#attendance-table tbody tr');
+  const newArr = [];
+  rows.each(function(index){
+    const $r = $(this);
+    const id = $r.find('.sid').text().trim();
+    const last = $r.find('.lname').text().trim();
+    const first = $r.find('.fname').text().trim();
+    const s = [];
+    const p = [];
+    $r.find('input.s').each(function(){ s.push($(this).is(':checked')); });
+    $r.find('input.p').each(function(){ p.push($(this).is(':checked')); });
+
+    newArr.push({ id, last, first, email:'', course:'', date:'', s, p });
+  });
+  students = newArr;
+  saveStudents(students);
+}
+
+/* -----------------------------
+   Add student form handling
+   ----------------------------- */
+function showErr(id, show){ show ? $(id).show() : $(id).hide(); }
+
+$('#add-student-form').on('submit', function(ev){
+  ev.preventDefault();
+
+  let id = $('#stu-id').val().trim();
+  let last = $('#stu-last').val().trim();
+  let first = $('#stu-first').val().trim();
+  let email = $('#stu-email').val().trim();
+  let course = $('#stu-course').val().trim();
+  let date = $('#stu-date').val();
+
+  let valid = true;
+
+  if (!/^[0-9]+$/.test(id)){ showErr('#err-id', true); valid=false; }
+  else showErr('#err-id', false);
+
+  if (!/^[A-Za-zÀ-ÖØ-öø-ÿ' -]+$/.test(last) || last===""){ showErr('#err-last', true); valid=false; }
+  else showErr('#err-last', false);
+
+  if (!/^[A-Za-zÀ-ÖØ-öø-ÿ' -]+$/.test(first) || first===""){ showErr('#err-first', true); valid=false; }
+  else showErr('#err-first', false);
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ showErr('#err-email', true); valid=false; }
+  else showErr('#err-email', false);
+
+  if (!course){ showErr('#err-course', true); valid=false; }
+  else showErr('#err-course', false);
+
+  if (!valid){ $('#add-confirm').hide(); return; }
+
+  // build student object with empty sessions
+  const newStudent = {
+    id, last, first, email, course, date,
+    s: [false,false,false,false,false,false],
+    p: [false,false,false,false,false,false]
+  };
+
+  students.push(newStudent);
+  saveStudents(students);
+
+  // re-render table and show confirmation
+  renderTable();
+  show('list');
+  $('#add-confirm').fadeIn(200).delay(1000).fadeOut(600);
+  $('#stu-id,#stu-last,#stu-first,#stu-email,#stu-course,#stu-date').val('');
+});
+
+/* -----------------------------
+   REPORT
+   ----------------------------- */
+let reportChart = null;
+
+$('#show-report').on('click', function(){
+  show('report');
+
+  // compute metrics
+  let total = students.length;
+  let present = 0;
+  let participated = 0;
+
+  students.forEach(st => {
+    const abs = (6 - (st.s ? st.s.filter(Boolean).length : 0));
+    if (abs < 6) present++;
+    const p = st.p ? st.p.filter(Boolean).length : 0;
+    if (p > 0) participated++;
+  });
+
+  $('#total-students').text(total);
+  $('#students-present').text(present);
+  $('#students-participated').text(participated);
+
+  // chart
+  const ctx = document.getElementById('reportChart').getContext('2d');
+  if (reportChart) reportChart.destroy();
+  reportChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['Total', 'Present (abs < 6)', 'Participated (≥1)'],
+      datasets: [{ label: 'Students', data: [total, present, participated] }]
+    },
+    options: { responsive:true, scales:{ y:{ beginAtZero:true, precision:0 } } }
+  });
+});
+
+/* -----------------------------
+   SEARCH
+   ----------------------------- */
+$('#search-name').on('input', function(){
+  let q = $(this).val().trim().toLowerCase();
+  $('#attendance-table tbody tr').each(function(){
+    let lname = $(this).find('.lname').text().toLowerCase();
+    let fname = $(this).find('.fname').text().toLowerCase();
+    if (lname.includes(q) || fname.includes(q)) $(this).show();
+    else $(this).hide();
+  });
+});
+
+/* -----------------------------
+   SORTING
+   ----------------------------- */
+$('#sort-abs').on('click', function(){
+  const rows = $('#attendance-table tbody tr').get();
+  rows.sort(function(a,b){
+    let x = parseInt($(a).find('.abs-count').text());
+    let y = parseInt($(b).find('.abs-count').text());
+    return x - y;
+  });
+  $.each(rows, function(i, r){ $('#attendance-table tbody').append(r); });
+  $('#sort-mode').text("Currently sorted by absences (ascending)");
+  syncFromTableToState();
+});
+
+$('#sort-par').on('click', function(){
+  const rows = $('#attendance-table tbody tr').get();
+  rows.sort(function(a,b){
+    let x = parseInt($(a).find('.part-count').text());
+    let y = parseInt($(b).find('.part-count').text());
+    return y - x;
+  });
+  $.each(rows, function(i, r){ $('#attendance-table tbody').append(r); });
+  $('#sort-mode').text("Currently sorted by participation (descending)");
+  syncFromTableToState();
+});
+
+/* -----------------------------
+   HIGHLIGHT EXCELLENT
+   ----------------------------- */
+$('#highlight-excellent').on('click', function(){
+  $('#attendance-table tbody tr').each(function(){
+    let abs = parseInt($(this).find('.abs-count').text());
+    if (abs < 3){
+      $(this).fadeTo(300,0.3).fadeTo(300,1).fadeTo(300,0.3).fadeTo(300,1);
+    }
+  });
+});
+
+/* -----------------------------
+   RESET COLORS
+   ----------------------------- */
+$('#reset-colors').on('click', function(){
+  $('#attendance-table tbody tr').removeClass('abs-few abs-mid abs-many');
+});
+
+/* -----------------------------
+   CLEAR STORAGE (danger)
+   ----------------------------- */
+$('#clear-storage').on('click', function(){
+  if (!confirm("This will remove all saved students and reset to demo data. Continue?")) return;
+  localStorage.removeItem(STORAGE_KEY);
+  students = defaultStudents();
+  saveStudents(students);
+  renderTable();
+});
+
+/* -----------------------------
+   Utilities + startup
+   ----------------------------- */
+function init(){
+  // initial render & show list by default
+  renderTable();
+  show('list');
+}
+$(document).ready(function(){ init(); });
+
+</script>
+</body>
+</html>
